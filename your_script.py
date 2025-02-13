@@ -101,7 +101,8 @@ if "authenticated" in st.session_state and st.session_state["authenticated"]:
         c.execute("SELECT id, metric, root_causes, action_taken, timestamp FROM corrective_actions")
         data = c.fetchall()
         conn.close()
-        return pd.DataFrame(data, columns=["ID", "Metric", "Root Causes", "Action Taken", "Timestamp"])
+        df = pd.DataFrame(data, columns=["ID", "Metric", "Root Causes", "Action Taken", "Timestamp"])
+        return df if not df.empty else pd.DataFrame(columns=["ID", "Metric", "Root Causes", "Action Taken", "Timestamp"])
 
     def automated_corrective_actions(metric, root_causes):
         actions = {
@@ -116,7 +117,10 @@ if "authenticated" in st.session_state and st.session_state["authenticated"]:
     # Admin Dashboard for Corrective Actions
     st.write("### Admin Dashboard: Manage Corrective Actions")
     df_corrective_actions = get_corrective_actions()
-    st.dataframe(df_corrective_actions)
+    if df_corrective_actions.empty:
+        st.warning("No corrective actions recorded yet.")
+    else:
+        st.dataframe(df_corrective_actions)
 
     # Generate and Download Reports with Data Visualization
     st.write("### Generate Administrative Report with Visuals")
