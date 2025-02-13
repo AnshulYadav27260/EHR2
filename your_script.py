@@ -12,10 +12,27 @@ from scipy.stats import zscore
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib.pyplot as plt
 import hashlib
+import os
+import sqlite3
 
 # Simulating Real-Time Monitoring Data Over 12 Months for Departments
 months = [f"Month {i}" for i in range(1, 13)]
 departments = ["Radiology", "Emergency", "Cardiology", "Internal Medicine"]
+
+# Initialize SQLite Database
+def init_db():
+    conn = sqlite3.connect("cdss_dashboard.db")
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS corrective_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    metric TEXT,
+                    root_causes TEXT,
+                    action_taken TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # User Authentication System
 users = {
@@ -70,8 +87,22 @@ if "authenticated" in st.session_state and st.session_state["authenticated"]:
     df_filtered = df_trend_monitoring[df_trend_monitoring["Department"] == selected_department]
 
     # Implement Automated Corrective Actions Tracking
-    corrective_action_history = []
-    
+    def save_corrective_action(metric, root_causes, action_taken):
+        conn = sqlite3.connect("cdss_dashboard.db")
+        c = conn.cursor()
+        c.execute("INSERT INTO corrective_actions (metric, root_causes, action_taken) VALUES (?, ?, ?)",
+                  (metric, root_causes, action_taken))
+        conn.commit()
+        conn.close()
+
+    def get_corrective_actions():
+        conn = sqlite3.connect("cdss_dashboard.db")
+        c = conn.cursor()
+        c.execute("SELECT id, metric, root_causes, action_taken, timestamp FROM corrective_actions")
+        data = c.fetchall()
+        conn.close()
+        return pd.DataFrame(data, columns=["ID", "Metric", "Root Causes", "Action Taken", "Timestamp"])
+
     def automated_corrective_actions(metric, root_causes):
         actions = {
             "Adoption Rate (%)": "Enhance CDSS training, improve user experience, and incentivize usage.",
@@ -79,17 +110,17 @@ if "authenticated" in st.session_state and st.session_state["authenticated"]:
             "Alert Fatigue Score (Lower is Better)": "Refine alert prioritization, reduce non-essential notifications, and implement AI-driven optimizations."
         }
         action = actions.get(metric, "No predefined corrective action available.")
-        corrective_action_history.append({"Metric": metric, "Root Causes": root_causes, "Action Taken": action})
+        save_corrective_action(metric, root_causes, action)
         return action
 
-    # Display Corrective Action History
-    st.write("### Corrective Action History")
-    st.dataframe(pd.DataFrame(corrective_action_history))
+    # Admin Dashboard for Corrective Actions
+    st.write("### Admin Dashboard: Manage Corrective Actions")
+    df_corrective_actions = get_corrective_actions()
+    st.dataframe(df_corrective_actions)
 
     # Generate and Download Reports with Data Visualization
     st.write("### Generate Administrative Report with Visuals")
-    if corrective_action_history:
-        df_corrective_actions = pd.DataFrame(corrective_action_history)
+    if not df_corrective_actions.empty:
         csv = df_corrective_actions.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download CSV Report", csv, "CDSS_Corrective_Actions_Report.csv", "text/csv")
 
@@ -97,5 +128,6 @@ if "authenticated" in st.session_state and st.session_state["authenticated"]:
     if st.sidebar.button("Logout"):
         st.session_state.clear()
         st.experimental_rerun()
+
 else:
     st.warning("🔒 Please log in to access the dashboard.")
